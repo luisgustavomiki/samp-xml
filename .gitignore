@@ -8,3 +8,6 @@
 
 # Compiled Static libraries
 *.lib
+
+# Visual Studio
+*.sdf
