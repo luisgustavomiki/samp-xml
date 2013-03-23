@@ -81,12 +81,9 @@ XMLHandler::XMLPointer* XMLHandler::getByPointer(XMLPOINTER pointer) {
 // Data Functions:
 bool XMLHandler::jumpToStart(XMLPOINTER _pointer) {
 	XMLPointer* pointer = this->getByPointer(_pointer);
-	if(pointer != NULL) {
-		pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLNODE_DOC;
-		pointer->element = NULL;
-		return true;
-	}
-	return false;
+	pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLNODE_DOC;
+	pointer->element = this->getByHandle(pointer->file)->doc;
+	return true;
 }
 
 bool XMLHandler::jumpFromStart(XMLPOINTER _pointer, std::string node) {
@@ -103,19 +100,24 @@ bool XMLHandler::jumpFromStart(XMLPOINTER _pointer, std::string node) {
 }
 
 bool XMLHandler::jumpToChild(XMLPOINTER _pointer, std::string node) {
+	// Getting current data
 	XMLPointer* pointer = this->getByPointer(_pointer);
+	// If current
 	if(pointer != NULL) {
 		rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) (pointer->element);
-		n = n->first_node(node.c_str());
-
-		pointer->element = n;
-		pointer->currentMode = XMLHandler::XMLPointer::XMLMODE_NODE;
-		return true;
+		if(n->type == rapidxml::node_element || n->type == rapidxml::node_document) {
+			n = n->first_node(node.c_str());
+			if(n != NULL) {
+				pointer->element = n;
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMODE_NODE;
+				return true;
+			}
+		}
 	}
 	return false;
 }
 
-bool XMLHandler::jumpToNext(XMLPOINTER _pointer, std::string node) {
+bool XMLHandler::jumpToNextSibling(XMLPOINTER _pointer) {
 	XMLPointer* pointer = this->getByPointer(_pointer);
 	if(pointer != NULL) {
 		rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) (pointer->element);
