@@ -20,10 +20,13 @@ public:
 	/*
 	 *	Data functions
 	 */
+	void name(XMLPOINTER _pointer, std::string* output);
+	void value(XMLPOINTER _pointer, std::string* output);
+
 	bool jumpToStart(XMLPOINTER _pointer);
 	bool jumpFromStart(XMLPOINTER _pointer, std::string node);
 	bool jumpToChild(XMLPOINTER _pointer, std::string node);
-	bool jumpToNextSibling(XMLPOINTER _pointer);
+	bool jumpToNext(XMLPOINTER _pointer, std::string node);
 
 	struct XMLFile {
 		static XMLHANDLE lastFileHandle;
@@ -37,7 +40,7 @@ public:
 	};
 	struct XMLPointer {
 		enum XMLMode {
-			XMLNODE_DOC,
+			XMLMODE_DOC,
 			XMLMODE_NODE,
 			XMLMODE_LOOP_NODE,
 			XMLMODE_LOOP_ATTR
