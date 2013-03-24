@@ -1,3 +1,4 @@
+#pragma once
 #include "xml.h"
 
 /*
@@ -34,15 +35,25 @@ XMLHandler::~XMLHandler(void) {
 
 // Files Class Constructor
 XMLHandler::XMLFile::XMLFile(std::string file) {
-	this->path = file;
-	this->file = new rapidxml::file<> (file.c_str());
-	this->handle = ++XMLFile::lastFileHandle;
-	this->doc = new rapidxml::xml_document<> ();
-	this->doc->parse<0>(this->file->data());
+	try {
+		this->path = file;
+		this->file = new rapidxml::file<> (file.c_str());
+		this->handle = ++XMLFile::lastFileHandle;
+		this->doc = new rapidxml::xml_document<> ();
+		this->doc->parse<0>(this->file->data());
+	} catch(std::runtime_error a) {
+		//logprintf((char*)a.what());
+		Debug::write(a.what());
+		this->handle = 0;
+	}
+
 }
 
 XMLHandler::XMLFile::~XMLFile() {
-	delete this->file;
+	if(this->handle) {
+		delete this->file;
+		delete this->doc;
+	}
 }
 
 // Pointers Class Constructor
@@ -51,21 +62,55 @@ XMLHandler::XMLPointer::XMLPointer(XMLHANDLE filehandle) {
 	this->handle = ++XMLPointer::lastOperationHandle;
 }
 
+/*
 XMLHandler::XMLPointer::XMLPointer(XMLPointer* copy) {
 	*this = *copy;
 	this->handle = ++XMLPointer::lastOperationHandle;
 }
+*/
 
 // loadFile - File Class Constructor Interface
 XMLHANDLE XMLHandler::loadFile(std::string path) {
-	this->files.push_back(new XMLHandler::XMLFile(path));
-	return this->files.back()->handle;
+	XMLHandler::XMLFile* f = new XMLHandler::XMLFile(path);
+	if(f->OK) {
+		this->files.push_back(f);
+		return this->files.back()->handle;
+	} else {
+		delete f;
+		return 0;
+	}
+}
+
+void XMLHandler::unloadFile(XMLHANDLE file) {
+	if(this->isValidFile(file))
+		delete this->getByHandle(file);
+}
+
+bool XMLHandler::isValidFile(XMLHANDLE file) {
+	return this->getByHandle(file) != NULL;
 }
 
 // createPointer - Pointer Class Constructor Interface
 XMLPOINTER XMLHandler::createPointer(XMLHANDLE file) {
-	this->pointers.push_back(new XMLHandler::XMLPointer(file));
+	if(!this->isValidFile(file))
+		return 0;
+
+	XMLHandler::XMLPointer* p = (new XMLHandler::XMLPointer(file));
+	this->pointers.push_back(p);
+
+	p->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_DOC;
+	p->element = this->getByHandle(file)->doc;
+
 	return this->files.back()->handle;
+}
+
+void XMLHandler::destroyPointer(XMLPOINTER pointer) {
+	if(this->isValidPointer(pointer))
+		delete this->getByPointer(pointer);
+}
+
+bool XMLHandler::isValidPointer(XMLHANDLE file) {
+	return this->getByPointer(file) != NULL;
 }
 
 // getByHandle - Gets pointer to object from XMLHANDLE uniqueid.
@@ -81,6 +126,10 @@ XMLHandler::XMLFile* XMLHandler::getByHandle(XMLHANDLE handle) {
 // getByHandle - Gets pointer to object from XMLHANDLE uniqueid.
 XMLHandler::XMLPointer* XMLHandler::getByPointer(XMLPOINTER pointer) {
 	for(int i = 0; i != this->pointers.size(); ++i) {
+		/*char buffer[80];
+		sprintf(buffer, "getByPointer pointer(%d - %d) 0x%x", pointer, this->pointers[i]->handle, this->pointers[i]);
+		Debug::write(buffer);*/
+
 		if(this->pointers[i]->handle == pointer) {
 			return this->pointers[i];
 	   }
@@ -89,29 +138,40 @@ XMLHandler::XMLPointer* XMLHandler::getByPointer(XMLPOINTER pointer) {
 }
 
 // Data Functions:
-void XMLHandler::name(XMLPOINTER _pointer, std::string* output) {
+bool XMLHandler::name(XMLPOINTER _pointer, std::string* output) {
 	XMLPointer* pointer = this->getByPointer(_pointer);
+
+	/*char buffer[80];
+	sprintf(buffer, "pointer(%d) 0x%x", _pointer, pointer);
+	Debug::write(buffer);*/
+
 	// If pointer exists
 	if(pointer != NULL) {
 		if(pointer->element != NULL) {
 			rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
+			/*sprintf(buffer, "getting name: %s", n->name());
+			Debug::write(buffer);*/
 			*output = n->name();
+			return true;
 		}
 	}
+	return false;
 }
 
-void XMLHandler::value(XMLPOINTER _pointer, std::string* output) {
+bool XMLHandler::value(XMLPOINTER _pointer, std::string* output) {
 	XMLPointer* pointer = this->getByPointer(_pointer);
 	// If pointer exists
 	if(pointer != NULL) {
 		if(pointer->element != NULL) {
 			rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
 			*output = n->value();
+			return true;
 		}
 	}
+	return false;
 }
 
-bool XMLHandler::jumpToStart(XMLPOINTER _pointer) {
+bool XMLHandler::jumpToDocument(XMLPOINTER _pointer) {
 	XMLPointer* pointer = this->getByPointer(_pointer);
 	// If pointer exists
 	if(pointer != NULL) {
@@ -123,30 +183,7 @@ bool XMLHandler::jumpToStart(XMLPOINTER _pointer) {
 	return false;
 }
 
-bool XMLHandler::jumpFromStart(XMLPOINTER _pointer, std::string node) {
-	XMLPointer* pointer = this->getByPointer(_pointer);
-	// If pointer exists
-	if(pointer != NULL) {
-		// Get file pointer
-		XMLFile* file = getByHandle(pointer->file);
-		// Get first node from document
-		rapidxml::xml_node<>* n;
-		if(node.length() > 0) {
-			n = file->doc->first_node(node.c_str());
-		} else {
-			n = file->doc->first_node();
-		}
-		// If there's a node matching with std::string node
-		if(n != NULL) {
-			pointer->element = n;
-			pointer->currentMode = XMLHandler::XMLPointer::XMLMODE_NODE;
-			return true;
-		}
-	}
-	return false;
-}
-
-bool XMLHandler::jumpToChild(XMLPOINTER _pointer, std::string node) {
+bool XMLHandler::jumpToChildNode(XMLPOINTER _pointer, std::string node) {
 	// Getting current data
 	XMLPointer* pointer = this->getByPointer(_pointer);
 	// If current
@@ -174,7 +211,7 @@ bool XMLHandler::jumpToChild(XMLPOINTER _pointer, std::string node) {
 	return false;
 }
 
-bool XMLHandler::jumpToNext(XMLPOINTER _pointer, std::string node) {
+bool XMLHandler::jumpToNextNode(XMLPOINTER _pointer, std::string node) {
 	// get current data
 	XMLPointer* pointer = this->getByPointer(_pointer);
 	// is valid pointer
@@ -200,4 +237,54 @@ bool XMLHandler::jumpToNext(XMLPOINTER _pointer, std::string node) {
 	return false;
 }
 
+bool XMLHandler::jumpToParentNode(XMLPOINTER _pointer) {
+	// get current data
+	XMLPointer* pointer = this->getByPointer(_pointer);
+	// is valid pointer
+	if(pointer != NULL) {
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_ATTR) {
+			rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
+			pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE;
+			pointer->element = pointer->nodetemp;
+			return true;
+		}
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
+			rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
+			if(n->parent() != NULL) {
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE;
+				pointer->element = n;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool XMLHandler::jumpToAttr(XMLPOINTER _pointer, std::string attr) {
+	// Getting current data
+	XMLPointer* pointer = this->getByPointer(_pointer);
+	// If current
+	if(pointer != NULL) {
+		// if current position would be suitable to have a child attribute
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
+			rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) (pointer->element);
+			rapidxml::xml_attribute<>* a;
+			// get first child attr
+			if(attr.length() > 0) {
+				a = n->first_attribute(attr.c_str());
+			} else {
+				a = n->first_attribute();
+			}
+			// is there a child node
+			if(a != NULL) {
+				// complete operation
+				pointer->nodetemp = pointer->element;
+				pointer->element = a;
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMODE_ATTR;
+				return true;
+			}
+		}
+	}
+	return false;
+}
 

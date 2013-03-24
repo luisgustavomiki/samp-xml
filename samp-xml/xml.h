@@ -7,6 +7,8 @@
 #include "rapidxml\rapidxml.hpp"
 #include "rapidxml\rapidxml_utils.hpp"
 
+#include "Debug.h"
+
 typedef int XMLHANDLE;
 typedef int XMLPOINTER;
 
@@ -15,21 +17,30 @@ public:
 	XMLHandler(void);
 	~XMLHandler(void);
 	XMLHANDLE loadFile(std::string path);
-	XMLPOINTER createPointer(XMLHANDLE file);
+	void unloadFile(XMLHANDLE file);
+	bool isValidFile(XMLHANDLE file);
 
+	XMLPOINTER createPointer(XMLHANDLE file);
+	void destroyPointer(XMLPOINTER pointer);
+	bool isValidPointer(XMLHANDLE file);
 	/*
 	 *	Data functions
 	 */
-	void name(XMLPOINTER _pointer, std::string* output);
-	void value(XMLPOINTER _pointer, std::string* output);
+	bool name(XMLPOINTER _pointer, std::string* output);
+	bool value(XMLPOINTER _pointer, std::string* output);
 
-	bool jumpToStart(XMLPOINTER _pointer);
-	bool jumpFromStart(XMLPOINTER _pointer, std::string node);
-	bool jumpToChild(XMLPOINTER _pointer, std::string node);
-	bool jumpToNext(XMLPOINTER _pointer, std::string node);
+	bool jumpToDocument(XMLPOINTER _pointer);
+
+	bool jumpToChildNode(XMLPOINTER _pointer, std::string node);
+	bool jumpToNextNode(XMLPOINTER _pointer, std::string node);
+	bool jumpToParentNode(XMLPOINTER _pointer);
+
+	bool jumpToAttr(XMLPOINTER _pointer, std::string attr);
 
 	struct XMLFile {
 		static XMLHANDLE lastFileHandle;
+		bool OK;
+
 		XMLHANDLE handle;
 		std::string path;
 		rapidxml::file<>* file;
@@ -42,8 +53,7 @@ public:
 		enum XMLMode {
 			XMLMODE_DOC,
 			XMLMODE_NODE,
-			XMLMODE_LOOP_NODE,
-			XMLMODE_LOOP_ATTR
+			XMLMODE_ATTR
 		};
 
 		static XMLPOINTER lastOperationHandle;
@@ -52,9 +62,10 @@ public:
 		
 		XMLMode currentMode;
 		void* element;
+		void* nodetemp;
 
 		XMLPointer(XMLHANDLE filehandle);
-		XMLPointer(XMLPointer* copy);
+		//XMLPointer(XMLPointer* copy);
 	};
 private:
 	std::vector<XMLHandler::XMLFile*> files;
@@ -62,4 +73,3 @@ private:
 	XMLPointer* getByPointer(XMLPOINTER pointer);
 	XMLFile* getByHandle(XMLHANDLE handle);
 };
-
