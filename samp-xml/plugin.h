@@ -15,6 +15,7 @@ class AMXInfo {
 
 	static std::vector<AMXInfo*> thislist;
 public:
+	std::string* getstring(AMX* _vm, cell _param);
 	static void add(AMX* _vm);
 	static void remove(AMX* _vm);
 	static XMLHandler* get(AMX* _vm);

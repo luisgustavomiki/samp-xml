@@ -3,9 +3,11 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <sstream>
 
 #include "rapidxml\rapidxml.hpp"
 #include "rapidxml\rapidxml_utils.hpp"
+#include "rapidxml\rapidxml_print.hpp"
 
 #include "Debug.h"
 
@@ -19,9 +21,12 @@ public:
 	XMLHANDLE loadFile(std::string path);
 	void unloadFile(XMLHANDLE file);
 	bool isValidFile(XMLHANDLE file);
+	bool saveFile(XMLHANDLE file);
+	XMLHANDLE getFile(XMLPOINTER pointer);
 
 	XMLPOINTER createPointer(XMLHANDLE file);
 	void destroyPointer(XMLPOINTER pointer);
+	XMLPOINTER clonePointer(XMLPOINTER pointer);
 	bool isValidPointer(XMLHANDLE file);
 	/*
 	 *	Data functions
@@ -36,6 +41,15 @@ public:
 	bool jumpToParentNode(XMLPOINTER _pointer);
 
 	bool jumpToAttr(XMLPOINTER _pointer, std::string attr);
+	bool jumpToNextAttr(XMLPOINTER _pointer, std::string node);
+
+	bool prependnode(XMLPOINTER _pointer, std::string _name, std::string _value);
+	bool appendnode(XMLPOINTER _pointer, std::string _name, std::string _value);
+	bool remove(XMLPOINTER _pointer);
+	/*
+		Sets 
+			*/
+
 
 	struct XMLFile {
 		static XMLHANDLE lastFileHandle;
@@ -65,6 +79,7 @@ public:
 		void* nodetemp;
 
 		XMLPointer(XMLHANDLE filehandle);
+		~XMLPointer();
 		//XMLPointer(XMLPointer* copy);
 	};
 private:

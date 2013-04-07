@@ -62,6 +62,9 @@ XMLHandler::XMLPointer::XMLPointer(XMLHANDLE filehandle) {
 	this->handle = ++XMLPointer::lastOperationHandle;
 }
 
+XMLHandler::XMLPointer::~XMLPointer() {
+
+}
 /*
 XMLHandler::XMLPointer::XMLPointer(XMLPointer* copy) {
 	*this = *copy;
@@ -69,12 +72,16 @@ XMLHandler::XMLPointer::XMLPointer(XMLPointer* copy) {
 }
 */
 
+XMLHANDLE XMLHandler::getFile(XMLPOINTER pointer) {
+	return this->getByPointer(pointer)->file;
+}
+
 // loadFile - File Class Constructor Interface
 XMLHANDLE XMLHandler::loadFile(std::string path) {
 	XMLHandler::XMLFile* f = new XMLHandler::XMLFile(path);
 	if(f->OK) {
 		this->files.push_back(f);
-		return this->files.back()->handle;
+		return f->handle;
 	} else {
 		delete f;
 		return 0;
@@ -82,8 +89,40 @@ XMLHANDLE XMLHandler::loadFile(std::string path) {
 }
 
 void XMLHandler::unloadFile(XMLHANDLE file) {
-	if(this->isValidFile(file))
+	if(this->isValidFile(file)) {
+		for(unsigned int i = 0; i < this->files.size(); ++i) {
+			if(this->files[i]->handle == file) {
+				this->files.erase(i + this->files.begin());
+				break;
+			}
+		}
+		while(true) {
+			bool change = false;
+			for(unsigned int i = 0; i < this->pointers.size(); ++i) {
+				if(this->pointers[i]->file == file) {
+					this->pointers.erase(i + this->pointers.begin());
+					change = true;
+					break;
+				}
+			}
+			if(!change) 
+				break;
+		}
 		delete this->getByHandle(file);
+	}
+}
+
+bool XMLHandler::saveFile(XMLHANDLE file) {
+	if(this->isValidFile(file)) {
+		XMLHandler::XMLFile* f = this->getByHandle(file);	
+		if(f->OK) {
+			std::fstream fs(f->path.c_str());
+			fs << f->doc;
+			fs.close();
+			return true;
+		}
+	}
+	return false;
 }
 
 bool XMLHandler::isValidFile(XMLHANDLE file) {
@@ -101,12 +140,34 @@ XMLPOINTER XMLHandler::createPointer(XMLHANDLE file) {
 	p->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_DOC;
 	p->element = this->getByHandle(file)->doc;
 
-	return this->files.back()->handle;
+	return p->handle;
+}
+
+XMLPOINTER XMLHandler::clonePointer(XMLPOINTER pointer) {
+	if(!this->isValidPointer(pointer))
+		return 0;
+
+	XMLHandler::XMLPointer* p = this->getByPointer(pointer);
+	XMLHandler::XMLPointer* np = (new XMLHandler::XMLPointer(p->file));
+	np->element = p->element;
+	np->currentMode = p->currentMode;
+	np->nodetemp = p->nodetemp;
+
+	this->pointers.push_back(np);
+	return np->handle;
 }
 
 void XMLHandler::destroyPointer(XMLPOINTER pointer) {
-	if(this->isValidPointer(pointer))
-		delete this->getByPointer(pointer);
+	if(this->isValidPointer(pointer)) {
+		XMLHandler::XMLPointer* p = this->getByPointer(pointer);
+		for(unsigned int i = 0; i < this->pointers.size(); ++i) {
+			if(this->pointers[i] == p) {
+				this->pointers.erase(i + this->pointers.begin());
+				break;
+			}
+		}
+		delete p;
+	}
 }
 
 bool XMLHandler::isValidPointer(XMLHANDLE file) {
@@ -230,8 +291,8 @@ bool XMLHandler::jumpToNextNode(XMLPOINTER _pointer, std::string node) {
 			if(n != NULL) {
 				pointer->element = n;
 				pointer->currentMode = XMLHandler::XMLPointer::XMLMODE_NODE;
+				return true;
 			}
-			return true;
 		}
 	}
 	return false;
@@ -243,16 +304,19 @@ bool XMLHandler::jumpToParentNode(XMLPOINTER _pointer) {
 	// is valid pointer
 	if(pointer != NULL) {
 		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_ATTR) {
-			rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
 			pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE;
 			pointer->element = pointer->nodetemp;
 			return true;
 		}
 		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
-			rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
-			if(n->parent() != NULL) {
+			rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) (pointer->element);
+			if(n != NULL) {
 				pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE;
 				pointer->element = n;
+				return true;
+			} else {
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_DOC;
+				pointer->element = this->getByHandle(pointer->file)->doc;
 				return true;
 			}
 		}
@@ -265,22 +329,19 @@ bool XMLHandler::jumpToAttr(XMLPOINTER _pointer, std::string attr) {
 	XMLPointer* pointer = this->getByPointer(_pointer);
 	// If current
 	if(pointer != NULL) {
-		// if current position would be suitable to have a child attribute
 		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
-			rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) (pointer->element);
+			rapidxml::xml_node<>* node = (rapidxml::xml_node<>*) pointer->element;
 			rapidxml::xml_attribute<>* a;
-			// get first child attr
-			if(attr.length() > 0) {
-				a = n->first_attribute(attr.c_str());
+
+			if(attr.length()) {
+				a = node->first_attribute(attr.c_str());
 			} else {
-				a = n->first_attribute();
+				a = node->first_attribute();
 			}
-			// is there a child node
 			if(a != NULL) {
-				// complete operation
-				pointer->nodetemp = pointer->element;
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_ATTR;
 				pointer->element = a;
-				pointer->currentMode = XMLHandler::XMLPointer::XMLMODE_ATTR;
+				pointer->nodetemp = node;
 				return true;
 			}
 		}
@@ -288,3 +349,97 @@ bool XMLHandler::jumpToAttr(XMLPOINTER _pointer, std::string attr) {
 	return false;
 }
 
+bool XMLHandler::jumpToNextAttr(XMLPOINTER _pointer, std::string node) {
+	// get current data
+	XMLPointer* pointer = this->getByPointer(_pointer);
+	// is valid pointer
+	if(pointer != NULL) {
+		// if current position would be suitable to have a sibling
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_ATTR) {
+			// get node from pointer
+			rapidxml::xml_attribute<>* a = (rapidxml::xml_attribute<>*) (pointer->element);
+			// get sibling
+			if(node.length() > 0) {
+				a = a->next_attribute(node.c_str());
+			} else {
+				a = a->next_attribute();
+			}
+			if(a != NULL) {
+				pointer->element = a;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool XMLHandler::prependnode(XMLPOINTER _pointer, std::string _name, std::string _value) {
+	// Getting current data
+	XMLPointer* pointer = this->getByPointer(_pointer);
+	// If current
+	if(pointer != NULL) {
+		rapidxml::xml_document<> * doc = this->getByHandle(pointer->file)->doc;
+		rapidxml::xml_node<> *node = doc->allocate_node(rapidxml::node_element, doc->allocate_string(_name.c_str()), doc->allocate_string(_value.c_str()));
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
+			rapidxml::xml_node<> * e = (rapidxml::xml_node<> *) pointer->element;
+			e->prepend_node(node);
+		} else if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_DOC) {
+			rapidxml::xml_document<> * e = (rapidxml::xml_document<> *) pointer->element;
+			e->prepend_node(node);
+		}
+		return true;
+	}
+	return false;
+}
+
+bool XMLHandler::appendnode(XMLPOINTER _pointer, std::string _name, std::string _value) {
+	// Getting current data
+	XMLPointer* pointer = this->getByPointer(_pointer);
+	// If current
+	if(pointer != NULL) {
+		rapidxml::xml_document<> * doc = this->getByHandle(pointer->file)->doc;
+		rapidxml::xml_node<> *node = doc->allocate_node(rapidxml::node_element, doc->allocate_string(_name.c_str()), doc->allocate_string(_value.c_str()));
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
+			rapidxml::xml_node<> * e = (rapidxml::xml_node<> *) pointer->element;
+			e->append_node(node);
+		} else if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_DOC) {
+			rapidxml::xml_document<> * e = (rapidxml::xml_document<> *) pointer->element;
+			e->append_node(node);
+		}
+		return true;
+	}
+	return false;
+}
+
+bool XMLHandler::remove(XMLPOINTER _pointer) {
+	// Getting current data
+	XMLPointer* pointer = this->getByPointer(_pointer);
+	// If current
+	if(pointer != NULL) {
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_ATTR) {
+			//rapidxml::xml_base<>* n = (rapidxml::xml_base<>*) (pointer->element);
+			rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) pointer->nodetemp;
+			n->remove_attribute((rapidxml::xml_attribute<>*) pointer->element);
+
+			pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE;
+			pointer->element = pointer->nodetemp;
+			return true;
+		}
+		if(pointer->currentMode == XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE) {
+			rapidxml::xml_node<>* n = (rapidxml::xml_node<>*) (pointer->element);
+			rapidxml::xml_node<>* p = n->parent();
+			if(p != NULL) {
+				p->remove_node(n);
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_NODE;
+				pointer->element = p;
+				return true;
+			} else {
+				pointer->currentMode = XMLHandler::XMLPointer::XMLMode::XMLMODE_DOC;
+				pointer->element = this->getByHandle(pointer->file)->doc;
+				this->getByHandle(pointer->file)->doc->remove_node(n);
+				return true;
+			}
+		}
+	}
+	return false;
+}

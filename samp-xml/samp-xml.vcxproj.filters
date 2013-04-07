@@ -18,6 +18,9 @@
     <Filter Include="AMX\amx">
       <UniqueIdentifier>{db75e20e-d2dd-49ba-a039-2b0feb7d9291}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Pawn">
+      <UniqueIdentifier>{4137208f-b629-428e-9055-c07279e48d4e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="rapidxml\rapidxml.hpp">
@@ -69,5 +72,10 @@
     <ClCompile Include="Debug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="xml.inc">
+      <Filter>Pawn</Filter>
+    </Text>
   </ItemGroup>
 </Project>
